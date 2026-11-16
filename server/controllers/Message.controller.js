@@ -1,6 +1,7 @@
 import Message from "../models/Message.js";
 import Room from "../models/Room.js";
 import Workspace from "../models/Workspace.js";
+import mongoose from "mongoose";
 
 // ─── Helper: verify user has access to the room ───────────────────────────────
 const verifyRoomAccess = async (userId, roomId, workspaceId) => {
@@ -27,6 +28,11 @@ export const getMessages = async (req, res) => {
   try {
     const { roomId } = req.params;
     const { workspaceId, cursor, limit = 30 } = req.query;
+    const pageSize = Number(limit);
+    if (!mongoose.isValidObjectId(workspaceId) || (cursor && !mongoose.isValidObjectId(cursor)) ||
+        !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+      return res.status(400).json({ success: false, message: "Invalid pagination or workspace parameters" });
+    }
 
     // console.log("roomId:", roomId);
     // console.log("workspaceId:", workspaceId);
@@ -42,7 +48,7 @@ export const getMessages = async (req, res) => {
     }
 
     // only fetch top-level messages (not thread replies)
-    const query = { room: roomId, parentMessage: null, isDeleted: false };
+    const query = { room: roomId, workspace: workspaceId, parentMessage: null, isDeleted: false };
 
     // cursor-based pagination: fetch messages older than the cursor
     if (cursor) {
@@ -51,15 +57,16 @@ export const getMessages = async (req, res) => {
 
     const messages = await Message.find(query)
       .populate("author", "username avatar status")
-      .sort({ createdAt: -1 }) // newest first
-      .limit(Number(limit));
+      .sort({ _id: -1 })
+      .limit(pageSize + 1);
 
     // reverse so oldest is at top in the UI
-    const orderedMessages = messages.reverse();
+    const hasMore = messages.length > pageSize;
+    const page = messages.slice(0, pageSize);
+    const nextCursor = hasMore ? page[page.length - 1]._id : null;
+    const orderedMessages = page.reverse();
 
     // if we got a full page there are likely more messages
-    const hasMore = messages.length === Number(limit);
-    const nextCursor = hasMore ? messages[0]._id : null;
 
     res.status(200).json({
       success: true,
@@ -93,6 +100,9 @@ export const editMessage = async (req, res) => {
     if (!message) {
       return res.status(404).json({ success: false, message: "Message not found" });
     }
+
+    const access = await verifyRoomAccess(req.user.id, message.room, message.workspace);
+    if (access.error) return res.status(access.status).json({ success: false, message: access.error });
 
     // only the author can edit
     if (message.author.toString() !== req.user.id) {
@@ -136,11 +146,17 @@ export const deleteMessage = async (req, res) => {
       return res.status(404).json({ success: false, message: "Message not found" });
     }
 
+    const access = await verifyRoomAccess(req.user.id, message.room, message.workspace);
+    if (access.error) return res.status(access.status).json({ success: false, message: access.error });
+
     const isAuthor = message.author.toString() === req.user.id;
 
     // if not author, check if admin or above
     if (!isAuthor) {
-      const workspace = await Workspace.findById(workspaceId);
+      if (workspaceId && workspaceId !== message.workspace.toString()) {
+        return res.status(400).json({ success: false, message: "Workspace does not match message" });
+      }
+      const workspace = access.workspace;
       const userRole = workspace?.getMemberRole(req.user.id);
       const adminRoles = ["owner", "admin"];
 
@@ -184,7 +200,7 @@ export const getThreadReplies = async (req, res) => {
     }
 
     // verify parent message exists
-    const parentMessage = await Message.findById(messageId)
+    const parentMessage = await Message.findOne({ _id: messageId, room: roomId, workspace: workspaceId })
       .populate("author", "username avatar status");
 
     if (!parentMessage) {
@@ -193,6 +209,8 @@ export const getThreadReplies = async (req, res) => {
 
     const replies = await Message.find({
       parentMessage: messageId,
+      room: roomId,
+      workspace: workspaceId,
       isDeleted: false,
     })
       .populate("author", "username avatar status")
@@ -239,6 +257,10 @@ export const searchMessages = async (req, res) => {
     }).select("_id");
 
     const accessibleRoomIds = accessibleRooms.map((r) => r._id);
+
+    if (roomId && !accessibleRoomIds.some((id) => id.toString() === roomId)) {
+      return res.status(403).json({ success: false, message: "You do not have access to this room" });
+    }
 
     // build search query
     const searchQuery = {

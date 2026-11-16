@@ -59,10 +59,6 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }, // createdAt and  updatedAt
 );
 
-// Hash password before storing
-
-// Hash password before storing
-
 // Hash password before saving
 // Hash password before saving
 userSchema.pre("save", async function () {

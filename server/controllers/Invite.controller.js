@@ -10,6 +10,15 @@ export const createInvite = async (req, res) => {
   try {
     const { workspaceId } = req.params;
     const { assignedRole, maxUses, expiresInDays } = req.body;
+    if (assignedRole && ![ROLES.MEMBER, ROLES.GUEST].includes(assignedRole)) {
+      return res.status(400).json({ success: false, message: "Invalid invite role" });
+    }
+    if (maxUses != null && (!Number.isInteger(maxUses) || maxUses < 1)) {
+      return res.status(400).json({ success: false, message: "Invalid maximum uses" });
+    }
+    if (expiresInDays != null && (!Number.isInteger(expiresInDays) || expiresInDays < 1 || expiresInDays > 365)) {
+      return res.status(400).json({ success: false, message: "Invalid expiry" });
+    }
 
     const workspace = await Workspace.findById(workspaceId);
     if (!workspace) {
@@ -28,7 +37,7 @@ export const createInvite = async (req, res) => {
       workspace: workspaceId,
       createdBy: req.user.id,
       assignedRole: assignedRole || ROLES.MEMBER,
-      maxUses: maxUses || -1,
+      maxUses: maxUses ?? -1,
       expiresAt,
     });
 
@@ -141,10 +150,10 @@ export const getWorkspaceInvites = async (req, res) => {
 // ─── @desc   Revoke (deactivate) an invite link
 export const revokeInvite = async (req, res) => {
   try {
-    const { inviteId } = req.params;
+    const { inviteId, workspaceId } = req.params;
 
-    const invite = await Invite.findByIdAndUpdate(
-      inviteId,
+    const invite = await Invite.findOneAndUpdate(
+      { _id: inviteId, workspace: workspaceId },
       { isActive: false },
       { new: true }
     );

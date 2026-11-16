@@ -12,6 +12,10 @@ export const registerMessageEvents = (io, socket) => {
   socket.on("message:send", async (data) => {
     try {
       const { roomId, workspaceId, content, fileUrl, fileType, parentMessageId } = data;
+      if (socket.currentWorkspaceId !== workspaceId || typeof content !== "string" && content != null ||
+          (content && content.length > 2000)) {
+        return socket.emit("error", { message: "Invalid message" });
+      }
 
       // guard: only text rooms support messaging
       if (socket.currentRoomType !== "text") {
@@ -35,6 +39,11 @@ export const registerMessageEvents = (io, socket) => {
       // must have content or a file
       if (!content?.trim() && !fileUrl) {
         return socket.emit("error", { message: "Message cannot be empty" });
+      }
+
+      if (parentMessageId) {
+        const parent = await Message.findOne({ _id: parentMessageId, room: roomId, workspace: workspaceId, parentMessage: null, isDeleted: false });
+        if (!parent) return socket.emit("error", { message: "Thread not found" });
       }
 
       // create and save message
@@ -79,8 +88,9 @@ export const registerMessageEvents = (io, socket) => {
   socket.on("message:edit", async (data) => {
     try {
       const { messageId, content, roomId } = data;
+      if (socket.currentRoomId !== roomId) return socket.emit("error", { message: "Join the room first" });
 
-      if (!content?.trim()) {
+      if (typeof content !== "string" || !content.trim() || content.length > 2000) {
         return socket.emit("error", { message: "Message content cannot be empty" });
       }
 
@@ -89,7 +99,7 @@ export const registerMessageEvents = (io, socket) => {
 
       const message = await Message.findById(messageId);
 
-      if (!message) {
+      if (!message || message.room.toString() !== roomId) {
         return socket.emit("error", { message: "Message not found" });
       }
 
@@ -121,13 +131,14 @@ export const registerMessageEvents = (io, socket) => {
   socket.on("message:delete", async (data) => {
     try {
       const { messageId, roomId } = data;
+      if (socket.currentRoomId !== roomId) return socket.emit("error", { message: "Join the room first" });
 
       // text rooms only
       if (socket.currentRoomType !== "text") return;
 
       const message = await Message.findById(messageId);
 
-      if (!message) {
+      if (!message || message.room.toString() !== roomId) {
         return socket.emit("error", { message: "Message not found" });
       }
 
@@ -158,7 +169,7 @@ export const registerMessageEvents = (io, socket) => {
   // ── typing:start ─────────────────────────────────────────────────────────
   // Payload: { roomId }
   socket.on("typing:start", ({ roomId }) => {
-    if (socket.currentRoomType !== "text") return;
+    if (socket.currentRoomType !== "text" || socket.currentRoomId !== roomId) return;
 
     // broadcast to others in room (not the sender)
     socket.to(`room:${roomId}`).emit("typing:update", {
@@ -171,7 +182,7 @@ export const registerMessageEvents = (io, socket) => {
   // ── typing:stop ──────────────────────────────────────────────────────────
   // Payload: { roomId }
   socket.on("typing:stop", ({ roomId }) => {
-    if (socket.currentRoomType !== "text") return;
+    if (socket.currentRoomType !== "text" || socket.currentRoomId !== roomId) return;
 
     socket.to(`room:${roomId}`).emit("typing:update", {
       userId: socket.user.id,

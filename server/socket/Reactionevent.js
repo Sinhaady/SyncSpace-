@@ -13,6 +13,7 @@ export const registerReactionEvents = (io, socket) => {
   socket.on("message:react", async (data) => {
     try {
       const { messageId, roomId, emoji } = data;
+      if (socket.currentRoomId !== roomId) return socket.emit("error", { message: "Join the room first" });
 
       // text rooms only
       if (socket.currentRoomType !== "text") {
@@ -34,7 +35,7 @@ export const registerReactionEvents = (io, socket) => {
 
       const message = await Message.findById(messageId);
 
-      if (!message) {
+      if (!message || message.room.toString() !== roomId) {
         return socket.emit("error", { message: "Message not found" });
       }
 

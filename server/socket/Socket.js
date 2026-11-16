@@ -74,6 +74,7 @@ export const initSocket = (httpServer) => {
           return socket.emit("error", { message: "Not a member of this workspace" });
         }
 
+        if (socket.workspaceId) socket.leave(`workspace:${socket.workspaceId}`);
         socket.join(`workspace:${workspaceId}`);
         socket.workspaceId = workspaceId;
         socket.userRole = userRole;
@@ -94,7 +95,7 @@ export const initSocket = (httpServer) => {
           return socket.emit("error", { message: "Not a member of this workspace" });
         }
 
-        const room = await Room.findById(roomId);
+        const room = await Room.findOne({ _id: roomId, workspace: workspaceId, isArchived: false });
 
         if (!room) {
           return socket.emit("error", { message: "Room not found" });
@@ -112,6 +113,7 @@ export const initSocket = (httpServer) => {
 
         socket.join(`room:${roomId}`);
         socket.currentRoomId = roomId;
+        socket.currentWorkspaceId = workspaceId;
         socket.currentRoomType = room.type;
         socket.userRole = userRole;
 
@@ -136,6 +138,7 @@ export const initSocket = (httpServer) => {
 
     // ── Leave a room ─────────────────────────────────────────────────────────
     socket.on("room:leave", ({ roomId }) => {
+      if (socket.currentRoomId !== roomId) return;
       socket.leave(`room:${roomId}`);
 
       socket.to(`room:${roomId}`).emit("room:userLeft", {
@@ -144,6 +147,7 @@ export const initSocket = (httpServer) => {
       });
 
       socket.currentRoomId = null;
+      socket.currentWorkspaceId = null;
       socket.currentRoomType = null;
 
       console.log(`🚪 ${socket.user.username} left room ${roomId}`);
