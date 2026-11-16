@@ -1,18 +1,18 @@
 # SyncSpace
 
-SyncSpace is a team collaboration app built with React, Express, MongoDB, and Socket.IO. It provides workspaces and rooms for conversations, with real-time messaging and presence.
+SyncSpace is a team collaboration app for organizing conversations around workspaces and rooms. The React client connects to an Express API backed by MongoDB, while Socket.IO delivers live chat activity and presence updates. Optional integrations add Google sign-in, file storage, AI summaries, and voice or video calls.
 
 ## Features
 
-- Workspace and room management with member roles and invitations
-- Real-time messages, threads, reactions, and online presence
-- Message history with cursor-based pagination
-- Local and Google sign-in
-- File uploads through Cloudinary, AI discussion summaries through Gemini, and calls through LiveKit
+- **Workspaces and rooms:** Create a space for a team, organize conversations into rooms, invite members, and manage access through member roles.
+- **Conversations:** Exchange messages in real time, reply in threads, add reactions, and see who is online. Older messages load through cursor-based pagination, and the API supports message search.
+- **Accounts:** Register with an email and password or sign in with Google. Authentication uses a JWT stored in an HTTP-only cookie.
+- **Attachments and profiles:** Upload chat files, user avatars, and workspace icons using Cloudinary.
+- **Summaries and calls:** Generate summaries of rooms or threads with Gemini, and join voice or video rooms through LiveKit.
 
 ## Run locally
 
-You need Node.js, npm, and a MongoDB connection string. Create `server/.env` with at least:
+You need Node.js, npm, and a MongoDB connection string. Copy the repository, then create `server/.env` with at least:
 
 ```dotenv
 ATLASDB_URL=your_mongodb_connection_string
@@ -20,7 +20,7 @@ JWT_SECRET=your_long_random_secret
 CLIENT_URL=http://localhost:5173
 ```
 
-Add credentials for the integrations you intend to use:
+Add credentials for the integrations you intend to use. Google OAuth also needs a callback URL registered with your Google OAuth client. Cloudinary powers uploads, Gemini powers summaries, and LiveKit powers calls.
 
 ```dotenv
 GOOGLE_CLIENT_ID=
@@ -44,7 +44,7 @@ npm install --prefix server
 npm run dev
 ```
 
-The client runs at `http://localhost:5173` and proxies `/api` requests to the server at `http://localhost:5000`. Check the server with `http://localhost:5000/api/health`.
+Open `http://localhost:5173` after both processes start. In development, Vite proxies `/api` requests to the Express server at `http://localhost:5000`. You can confirm the API is running by opening `http://localhost:5000/api/health`.
 
 For a separately hosted client, set `VITE_API_URL` to the API base URL and `VITE_SOCKET_URL` to the Socket.IO server URL in `client/.env`. Set `CLIENT_URL` in `server/.env` to the client's origin.
 
